@@ -1,43 +1,21 @@
+import os
+
 import torch
-import torch.nn as nn
+import torch.nn.functional as f
 import torch.optim as optim
 import torch.utils.data
-import torch.nn.functional as F
-import torchvision
-from torchvision import transforms
 from PIL import Image
 
-
-class SimpleNet(nn.Module):
-
-    def __init__(self):
-        super(SimpleNet, self).__init__()
-        self.fc1 = nn.Linear(12288, 84)
-        self.fc2 = nn.Linear(84, 50)
-        self.fc3 = nn.Linear(50, 2)
-
-    def forward(self, x):
-        x = x.view(-1, 12288)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return x
+import simple_net as net
+import data
 
 
-def check_image(path):
-    try:
-        Image.open(path)
-        return True
-    except:
-        return False
-
-
-def train(model, optimizer, loss_fn, train_loader, val_loader, epochs=20, device="cpu"):
+def train(model, optimizer, loss_fn, data_holder, epochs=8, device="cpu"):
     for epoch in range(epochs):
         training_loss = 0.0
         valid_loss = 0.0
         model.train()
-        for batch in train_loader:
+        for batch in data_holder.train_data_loader:
             optimizer.zero_grad()
             inputs, targets = batch
             inputs = inputs.to(device)
@@ -47,22 +25,22 @@ def train(model, optimizer, loss_fn, train_loader, val_loader, epochs=20, device
             loss.backward()
             optimizer.step()
             training_loss += loss.data.item() * inputs.size(0)
-        training_loss /= len(train_loader.dataset)
+        training_loss /= len(data.train_data_loader.dataset)
 
         model.eval()
         num_correct = 0
         num_examples = 0
-        for batch in val_loader:
+        for batch in data_holder.val_data_loader:
             inputs, targets = batch
             inputs = inputs.to(device)
             output = model(inputs)
             targets = targets.to(device)
             loss = loss_fn(output, targets)
             valid_loss += loss.data.item() * inputs.size(0)
-            correct = torch.eq(torch.max(F.softmax(output), dim=1)[1], targets).view(-1)
+            correct = torch.eq(torch.max(f.softmax(output), dim=1)[1], targets).view(-1)
             num_correct += torch.sum(correct).item()
             num_examples += correct.shape[0]
-        valid_loss /= len(val_loader.dataset)
+        valid_loss /= len(data.val_data_loader.dataset)
 
         print(
             'Epoch: {}, Training Loss: {:.2f}, Validation Loss: {:.2f}, accuracy = {:.2f}'.
@@ -71,61 +49,22 @@ def train(model, optimizer, loss_fn, train_loader, val_loader, epochs=20, device
                        num_correct / num_examples))
 
 
-img_transforms = transforms.Compose([
-    transforms.Resize((64, 64)),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                         std=[0.229, 0.224, 0.225])
-])
+if __name__ == '__main__':
 
-train_data_path = "./train/"
-val_data_path = "./val/"
-test_data_path = "./test/"
+    simple_net = net.SimpleNet()
+    data = data.Data('./')
+    if not os.path.exists("./trained_model/simplenet.trained"):
+        optimizer = optim.Adam(simple_net.parameters(), lr=0.001)
+        train(simple_net, optimizer, torch.nn.CrossEntropyLoss(), data)
+        torch.save(simple_net, "./trained_model/simplenet.trained")
+    else:
+        torch.load("./trained_model/simplenet.trained")
 
-train_data = torchvision.datasets.ImageFolder(root=train_data_path, transform=img_transforms, is_valid_file=check_image)
-val_data = torchvision.datasets.ImageFolder(root=val_data_path, transform=img_transforms, is_valid_file=check_image)
-test_data = torchvision.datasets.ImageFolder(root=test_data_path, transform=img_transforms, is_valid_file=check_image)
+    labels = ['cat', 'fish']
+    img1 = Image.open("./input/zhivotnye-koty-454639.jpg")
+    img1 = data.img_transforms(img1).to(torch.device("cpu"))
 
-batch_size = 128
-train_data_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size)
-val_data_loader = torch.utils.data.DataLoader(val_data, batch_size=batch_size)
-test_data_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size)
+    prediction1 = f.softmax(simple_net(img1), dim=1)
+    prediction1 = prediction1.argmax()
 
-simplenet = SimpleNet()
-
-optimizer = optim.Adam(simplenet.parameters(), lr=0.001)
-
-if torch.cuda.is_available():
-    device = torch.device("cuda")
-else:
-    device = torch.device("cpu")
-
-simplenet.to(device)
-
-train(simplenet, optimizer, torch.nn.CrossEntropyLoss(), train_data_loader, val_data_loader, epochs=6, device=device)
-
-labels = ['cat', 'fish']
-
-img1 = Image.open("./input/animals-fish-66401.jpg")
-img2 = Image.open("./input/DDTzb7oWAAAiuFh.jpg")
-img3 = Image.open("./input/zhivotnye-koty-454639.jpg")
-
-img1 = img_transforms(img1).to(device)
-img2 = img_transforms(img2).to(device)
-img3 = img_transforms(img3).to(device)
-
-prediction1 = F.softmax(simplenet(img1))
-prediction1 = prediction1.argmax()
-
-prediction2 = F.softmax(simplenet(img2))
-prediction2 = prediction2.argmax()
-
-prediction3 = F.softmax(simplenet(img3))
-prediction3 = prediction3.argmax()
-
-
-print(labels[prediction1])
-print(labels[prediction2])
-print(labels[prediction3])
-
-torch.save(simplenet, "./trained_model/simplenet.trained")
+    print(labels[prediction1])
