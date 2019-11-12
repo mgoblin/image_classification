@@ -1,1 +1,12 @@
+# idea files
 .idea
+
+# images
+**/*.jpg
+**/*.jpeg
+**/*.gif
+**/*.bmp
+**/*.png
+
+# trainded model savings
+**/*.trained
