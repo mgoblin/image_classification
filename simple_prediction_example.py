@@ -61,10 +61,11 @@ if __name__ == '__main__':
         torch.load("./trained_model/simplenet.trained")
 
     labels = ['cat', 'fish']
-    img1 = Image.open("./input/zhivotnye-koty-454639.jpg")
+    img1 = Image.open("./input/lyubopitnii-polosatii-kotenok.orig.jpg")
     img1 = data.img_transforms(img1).to(torch.device("cpu"))
 
-    prediction1 = f.softmax(simple_net(img1), dim=1)
+    prediction1_tensor = simple_net(img1)
+    prediction1 = f.softmax(prediction1_tensor, dim=1)
     prediction1 = prediction1.argmax()
 
     print(labels[prediction1])
